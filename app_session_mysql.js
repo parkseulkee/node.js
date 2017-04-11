@@ -2,6 +2,7 @@ var express = require('express');
 var session = require('express-session');
 var MySQLStore = require('express-mysql-session');
 var bodyParser = require('body-parser');
+var fs = require('file-system');
 var app = express();
 
 var options = {
