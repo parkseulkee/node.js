@@ -49,7 +49,29 @@ passport.deserializeUser(function(id, done) {
   });
 });
 
-
+var strategyForm = function(string,id,displayName,done){
+  var authId = string+id;
+  var sql = 'SELECT * FROM users WHERE authId=?';
+  conn.query(sql, [authId], function(err, results){
+    if(results.length > 0){
+      done(null, results[0]);
+    } else {
+      var newuser = {
+        'authId':authId,
+        'displayName':displayName
+      };
+      var sql = 'INSERT INTO users SET ?';
+      conn.query(sql, newuser, function(err, results){
+        if(err){
+          console.log(err);
+          done('Error');
+        } else {
+          done(null, newuser);
+        }
+      })
+    }
+  });
+};
 passport.use(new FacebookStrategy({
     clientID: '109125169639363',
     clientSecret: 'e7b147e18eaaa000c90f9c5580889a1f',
@@ -57,27 +79,7 @@ passport.use(new FacebookStrategy({
   },
   function(accessToken, refreshToken, profile, done) {
     console.log(profile);
-    var authId = 'facebook:'+profile.id;
-    var sql = 'SELECT * FROM users WHERE authId=?';
-    conn.query(sql, [authId], function(err, results){
-      if(results.length>0){
-        done(null, results[0]);
-      } else {
-        var newuser = {
-          'authId':authId,
-          'displayName':profile.displayName
-        };
-        var sql = 'INSERT INTO users SET ?';
-        conn.query(sql, newuser, function(err, results){
-          if(err){
-            console.log(err);
-            done('Error');
-          } else {
-            done(null, newuser);
-          }
-        })
-      }
-    });
+    strategyForm('facebook:',profile.id,profile.displayName,done);
   }
 ));
 passport.use(new GoogleStrategy({
@@ -87,27 +89,7 @@ passport.use(new GoogleStrategy({
   },
   function(accessToken, refreshToken, profile, done) {
     console.log(profile);
-    var authId = 'google:'+profile.id;
-    var sql = 'SELECT * FROM users WHERE authId=?';
-    conn.query(sql, [authId], function(err, results){
-      if(results.length>0){
-        done(null, results[0]);
-      } else {
-        var newuser = {
-          'authId':authId,
-          'displayName':profile.displayName
-        };
-        var sql = 'INSERT INTO users SET ?';
-        conn.query(sql, newuser, function(err, results){
-          if(err){
-            console.log(err);
-            done('Error');
-          } else {
-            done(null, newuser);
-          }
-        })
-      }
-    });
+    strategyForm('google:',profile.id,profile.displayName,done);
   }
 ));
 passport.use(new NaverStrategy({
@@ -117,27 +99,7 @@ passport.use(new NaverStrategy({
 	},
     function(accessToken, refreshToken, profile, done) {
       console.log(profile);
-      var authId = 'naver:'+profile.id;
-      var sql = 'SELECT * FROM users WHERE authId=?';
-      conn.query(sql, [authId], function(err, results){
-        if(results.length>0){
-          done(null, results[0]);
-        } else {
-          var newuser = {
-            'authId':authId,
-            'displayName':profile.emails[0].value
-          };
-          var sql = 'INSERT INTO users SET ?';
-          conn.query(sql, newuser, function(err, results){
-            if(err){
-              console.log(err);
-              done('Error');
-            } else {
-              done(null, newuser);
-            }
-          })
-        }
-      });
+      strategyForm('naver:',profile.id,profile.emails[0].value,done);
     }
 ));
 app.get(
