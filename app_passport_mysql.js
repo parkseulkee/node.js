@@ -67,32 +67,31 @@ passport.serializeUser(function(user, done) {
 });
 passport.deserializeUser(function(id, done) {
   console.log('deserializeUser', id);
-  for(var i=0; i<users.length; i++){
-    var user = users[i];
-    if(user.authId === id){
-      return done(null, user);
-    }
-  }
-  done('There is no user.');
+  var sql = 'SELECT * FROM users authId=?';
+  conn.query(sql, [id],function(err,results){
+    console.log(sql,err,results);
+  });
 });
 passport.use(new LocalStrategy(
   function(username, password, done){
     var uname = username;
     var pwd = password;
-    for(var i=0; i<users.length; i++){
-      var user = users[i];
-      if(uname === user.username) {
-        return hasher({password:pwd, salt:user.salt}, function(err, pass, salt, hash){
-          if(hash === user.password){
-            console.log('LocalStrategy', user);
-            done(null, user);
-          } else {
-            done(null, false);
-          }
-        });
+    var sql = 'SELECT * FROM users WHERE authId=?';
+    conn.query(sql,['local'+uname],function(err,results){
+      console.log(results);
+      if(err){
+        return done('There is no user');
       }
-    }
-    done(null, false);
+      var user = results[0];
+      return hasher({password:pwd, salt:user.salt},function(err,pass,salt,hash){
+        if(hash === user.password){
+          console.log('LocalStrategy',user);
+          done(null,user);
+        }else{
+          done(null,false);
+        }
+      })
+    });
   }
 ));
 passport.use(new FacebookStrategy({
@@ -147,15 +146,6 @@ app.get(
     }
   )
 );
-var users = [
-  {
-    authId:'local:egoing',
-    username:'egoing',
-    password:'mTi+/qIi9s5ZFRPDxJLY8yAhlLnWTgYZNXfXlQ32e1u/hZePhlq41NkRfffEV+T92TGTlfxEitFZ98QhzofzFHLneWMWiEekxHD1qMrTH1CWY01NbngaAfgfveJPRivhLxLD1iJajwGmYAXhr69VrN2CWkVD+aS1wKbZd94bcaE=',
-    salt:'O0iC9xqMBUVl3BdO50+JWkpvVcA5g2VNaYTR5Hc45g+/iXy4PzcCI7GJN5h5r3aLxIhgMN8HSh0DhyqwAp8lLw==',
-    displayName:'Egoing'
-  }
-];
 app.post('/auth/register', function(req, res){
   hasher({password:req.body.password}, function(err, pass, salt, hash){
     var user = {
