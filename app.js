@@ -49,7 +49,7 @@ passport.deserializeUser(function(id, done) {
     }
   });
 });
-
+// login information store form
 var strategyForm = function(string,id,displayName,done){
   var authId = string+id;
   var sql = 'SELECT * FROM users WHERE authId=?';
