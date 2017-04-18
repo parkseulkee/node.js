@@ -17,6 +17,7 @@ conn.connect();
 var app = express();
 
 app.use(bodyParser.urlencoded({ extended: false }));
+// app.use(bodyParser.json());
 app.use(session({
   secret: '1234DSFs@adf1234!@#$asd',
   resave: false,
@@ -163,6 +164,8 @@ app.get('/auth/logout', function(req, res){
 });
 app.get('/welcome', function(req, res){
   if(req.user && req.user.displayName) {
+    // var json = JSON.stringify(req.user);
+    // res.json(json);
     res.send(`
       <h1>Hello, ${req.user.displayName}</h1>
       <a href="/auth/logout">logout</a>
