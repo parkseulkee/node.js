@@ -34,7 +34,7 @@ conn.connect();
 var app = express();
 
 app.use(bodyParser.urlencoded({ extended: false }));
-// app.use(bodyParser.json());
+app.use(bodyParser.json());
 app.use(session({
   secret: '1234DSFs@adf1234!@#$asd',
   resave: false,
@@ -53,6 +53,7 @@ app.use(passport.session());
 app.set('views','./views_file');
 app.set('view engine','jade');
 
+// session
 passport.serializeUser(function(user, done) {
   console.log('serializeUser : ', user);
   done(null, user.authId);
@@ -69,6 +70,7 @@ passport.deserializeUser(function(id, done) {
     }
   });
 });
+
 // login information store form
 var strategyForm = function(string,id,displayName,done){
   var authId = string+id;
@@ -147,7 +149,7 @@ app.get(
   passport.authenticate(
     'facebook',
     {
-      successRedirect: '/welcome',
+      successRedirect: '/my',
       failureRedirect: '/auth/login'
     }
   )
@@ -161,7 +163,7 @@ app.get(
     }
   ),
   function(req, res) {
-    res.redirect('/welcome');
+    res.redirect('/my');
   }
 );
 app.get(
@@ -173,32 +175,9 @@ app.get(
     }
   ),
   function(req, res) {
-  	res.redirect('/welcome');
+  	res.redirect('/my');
   }
 );
-app.get('/auth/logout', function(req, res){
-  req.logout();
-  req.session.save(function(){
-    res.redirect('/welcome');
-  });
-});
-app.get('/welcome', function(req, res){
-  if(req.user && req.user.displayName) {
-    // var json = JSON.stringify(req.user);
-    // res.json(json);
-    res.send(`
-      <h1>Hello, ${req.user.displayName}</h1>
-      <a href="/auth/logout">logout</a>
-    `);
-  } else {
-    res.send(`
-      <h1>Welcome</h1>
-      <ul>
-        <li><a href="/auth/login">Login</a></li>
-      </ul>
-    `);
-  }
-});
 app.get('/auth/login', function(req, res){
   var output = `
   <h1>Login</h1>
@@ -207,14 +186,35 @@ app.get('/auth/login', function(req, res){
   <p><a href="/auth/naver">Sign In with Naver</a></p>`;
   res.send(output);
 });
+app.get('/auth/logout', function(req, res){
+  req.logout();
+  req.session.save(function(){
+    res.redirect('/my');
+  });
+});
+
+// my
+app.get('/my', function(req, res){
+  if(req.user){
+    res.json(req.user);
+  }
+  res.send('not login');
+});
+
+// home
 app.get('/home', function(req, res){
   var sql = 'SELECT * FROM studyRooms';
   conn.query(sql, function(err, results){
     // var jsonObj = JSON.parse(jsonString);
-    // var jsonString = JSON.stringify(jsonObj);
+    //var list = JSON.stringify(results);
     res.json(results);
   });
 });
+app.get('/home/:room_id',function(req, res){
+  var room_id = req.params.room_id;
+});
+
+// add studyroom
 app.get('/insert', function(req,res){
   res.render('upload');
 });
@@ -229,12 +229,11 @@ app.post('/insert', studyroom_upload.single('image'), function(req,res){
       'img' : image,
       'address' : req.body.address
     };
-    var sql = 'INSERT INTO studyRooms SET ?';
-    conn.query(sql, studyroom, function(err, results){
-      res.send('Uploaded success');
-    });
+    conn.query('INSERT INTO studyRooms SET ?', studyroom);
+    res.redirect('/insert')
   })
 });
+
 app.listen(3003, function(){
   console.log('Connected 3003 port!!!');
 });
