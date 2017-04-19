@@ -2,10 +2,27 @@ var express = require('express');
 var session = require('express-session');
 var MySQLStore = require('express-mysql-session')(session);
 var bodyParser = require('body-parser');
+// OAuth API - login variable
 var passport = require('passport');
 var FacebookStrategy = require('passport-facebook').Strategy;
 var GoogleStrategy = require('passport-google-oauth').OAuth2Strategy;
 var NaverStrategy = require('passport-naver').Strategy;
+// Image variable
+var multer = require('multer');
+var storage = multer.diskStorage({
+  destination: function(req,file,cb){
+    cb(null,'studyrooms_image/')
+  },
+  filename: function(req,file,cb){
+    var sql = 'select id from studyRooms order by id desc limit 1';
+    conn.query(sql,function(err, results){
+      var id = 1;
+      if(results.length) id = results[0].id+1;
+      cb(null,id + '-' + file.originalname);
+    })
+  }
+})
+var studyroom_upload = multer({storage:storage});
 var mysql = require('mysql');
 var conn = mysql.createConnection({
   host     : 'localhost',
@@ -32,6 +49,9 @@ app.use(session({
 }));
 app.use(passport.initialize());
 app.use(passport.session());
+// test rendering file setting
+app.set('views','./views_file');
+app.set('view engine','jade');
 
 passport.serializeUser(function(user, done) {
   console.log('serializeUser : ', user);
@@ -195,8 +215,25 @@ app.get('/home', function(req, res){
     res.json(results);
   });
 });
-app.post('/insert', function(req, res){
-
+app.get('/insert', function(req,res){
+  res.render('upload');
+});
+app.post('/insert', studyroom_upload.single('image'), function(req,res){
+  var sql = 'select id from studyRooms order by id desc limit 1';
+  conn.query(sql,function(err, results){
+    var id = 1;
+    if(results.length) var id = results[0].id+1;
+    var image = '/studyrooms_image/'+ id + '-' + req.file.originalname;
+    var studyroom = {
+      'name' : req.body.name,
+      'img' : image,
+      'address' : req.body.address
+    };
+    var sql = 'INSERT INTO studyRooms SET ?';
+    conn.query(sql, studyroom, function(err, results){
+      res.send('Uploaded success');
+    });
+  })
 });
 app.listen(3003, function(){
   console.log('Connected 3003 port!!!');
