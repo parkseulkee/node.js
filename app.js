@@ -55,11 +55,9 @@ app.set('view engine','jade');
 
 // session
 passport.serializeUser(function(user, done) {
-  console.log('serializeUser : ', user);
   done(null, user.authId);
 });
 passport.deserializeUser(function(id, done) {
-  console.log('deserializeUser : ', id);
   var sql = 'SELECT * FROM users WHERE authId=?';
   conn.query(sql, [id], function(err, results){
     if(err){
@@ -101,7 +99,6 @@ passport.use(new FacebookStrategy({
     callbackURL: "/auth/facebook/callback"
   },
   function(accessToken, refreshToken, profile, done) {
-    console.log(profile);
     strategyForm('facebook:',profile.id,profile.displayName,done);
   }
 ));
@@ -111,7 +108,6 @@ passport.use(new GoogleStrategy({
     callbackURL: "/auth/google/callback"
   },
   function(accessToken, refreshToken, profile, done) {
-    console.log(profile);
     strategyForm('google:',profile.id,profile.displayName,done);
   }
 ));
@@ -121,7 +117,6 @@ passport.use(new NaverStrategy({
         callbackURL: "/auth/naver/callback"
 	},
     function(accessToken, refreshToken, profile, done) {
-      console.log(profile);
       strategyForm('naver:',profile.id,profile.emails[0].value,done);
     }
 ));
@@ -189,16 +184,17 @@ app.get('/auth/login', function(req, res){
 app.get('/auth/logout', function(req, res){
   req.logout();
   req.session.save(function(){
-    res.redirect('/my');
+    res.redirect('/');
   });
 });
 
 // my
 app.get('/my', function(req, res){
   if(req.user){
-    res.json(req.user);
+    res.status(200).json(req.user);
+  } else{
+    res.redirect('/auth/login');
   }
-  res.send('not login');
 });
 
 // home
@@ -207,18 +203,29 @@ app.get('/home', function(req, res){
   conn.query(sql, function(err, results){
     // var jsonObj = JSON.parse(jsonString);
     //var list = JSON.stringify(results);
-    res.json(results);
+    res.status(200).json(results);
   });
 });
-app.get('/home/:room_id',function(req, res){
+app.get('/home/:studyroom_id',function(req, res){
+  var studyroom_id = req.params.studyroom_id;
+});
+app.get('/home/:studyroom_id/:room_id',function(req, res){
+  if(!req.user){
+    res.redirect('/auth/login');
+  }
+  var studyroom_id = req.params.studyroom_id;
   var room_id = req.params.room_id;
 });
 
-// add studyroom
-app.get('/insert', function(req,res){
-  res.render('upload');
+// host
+app.get('/host/insert', function(req,res){
+  if(req.user){
+    res.render('upload');
+  } else{
+    res.redirect('/auth/login');
+  }
 });
-app.post('/insert', studyroom_upload.single('image'), function(req,res){
+app.post('/host/insert', studyroom_upload.single('image'), function(req,res){
   var sql = 'select id from studyRooms order by id desc limit 1';
   conn.query(sql,function(err, results){
     var id = 1;
@@ -227,11 +234,26 @@ app.post('/insert', studyroom_upload.single('image'), function(req,res){
     var studyroom = {
       'name' : req.body.name,
       'img' : image,
-      'address' : req.body.address
+      'address' : req.body.address,
+      'adminId' : req.user.id
     };
     conn.query('INSERT INTO studyRooms SET ?', studyroom);
-    res.redirect('/insert')
+    res.redirect('/');
+    // res.status(204);
   })
+});
+
+// default testing root home
+app.get("/", function(req,res){
+  var output = `
+  <p><a href="/home">home</a></p>
+  <p><a href="/my">my page</a></p>
+  <p><a href="/host/insert">host insert</a></p>
+  `;
+  if(req.user){
+    output += `<p><a href="/auth/logout">logout</a></p>`
+  }
+  res.status(200).send(output);
 });
 
 app.listen(3003, function(){
