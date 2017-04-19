@@ -187,6 +187,17 @@ app.get('/auth/login', function(req, res){
   <p><a href="/auth/naver">Sign In with Naver</a></p>`;
   res.send(output);
 });
+app.get('/home', function(req, res){
+  var sql = 'SELECT * FROM studyRooms';
+  conn.query(sql, function(err, results){
+    // var jsonObj = JSON.parse(jsonString);
+    // var jsonString = JSON.stringify(jsonObj);
+    res.json(results);
+  });
+});
+app.post('/insert', function(req, res){
+
+});
 app.listen(3003, function(){
   console.log('Connected 3003 port!!!');
 });

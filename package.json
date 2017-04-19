@@ -8,7 +8,6 @@
   },
   "author": "",
   "license": "ISC",
-
   "dependencies": {
     "body-parser": "^1.17.1",
     "cookie-parser": "^1.4.3",
@@ -26,6 +25,7 @@
     "passport-local": "^1.0.0",
     "passport-naver": "^1.0.4",
     "pbkdf2-password": "^1.2.1",
-    "session-file-store": "^1.0.0"
+    "session-file-store": "^1.0.0",
+    "view-engine": "^1.1.1"
   }
 }
