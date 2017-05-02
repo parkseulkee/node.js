@@ -144,10 +144,14 @@ app.get(
   passport.authenticate(
     'facebook',
     {
-      successRedirect: '/my',
+      //successRedirect: '/my',
       failureRedirect: '/auth/login'
     }
-  )
+  ),
+  function(req, res){
+    res.status(200).end();
+    //res.redirect('/my');
+  }
 );
 app.get(
   '/auth/google/callback',
@@ -158,7 +162,8 @@ app.get(
     }
   ),
   function(req, res) {
-    res.redirect('/my');
+    res.status(200).end();
+    // res.redirect('/my');
   }
 );
 app.get(
@@ -170,7 +175,9 @@ app.get(
     }
   ),
   function(req, res) {
-  	res.redirect('/my');
+    // console.log(req);
+    res.status(200).end();
+  	//res.redirect('/my');
   }
 );
 app.get('/auth/login', function(req, res){
@@ -184,7 +191,8 @@ app.get('/auth/login', function(req, res){
 app.get('/auth/logout', function(req, res){
   req.logout();
   req.session.save(function(){
-    res.redirect('/');
+    res.status(200).end();
+    // res.redirect('/');
   });
 });
 
@@ -193,12 +201,18 @@ app.get('/my', function(req, res){
   if(req.user){
     res.status(200).json(req.user);
   } else{
-    res.redirect('/auth/login');
+    res.status(300).end();
+    // res.redirect('/auth/login');
   }
 });
 
 // home
+app.post('/home',function(req,res){
+  console.log(req.body.name);
+  console.log(req.body.country);
+});
 app.get('/home', function(req, res){
+  console.log(req);
   var sql = 'SELECT * FROM studyRooms';
   conn.query(sql, function(err, results){
     // var jsonObj = JSON.parse(jsonString);
@@ -216,12 +230,20 @@ app.get('/home/:studyroom_id/:room_id',function(req, res){
   var studyroom_id = req.params.studyroom_id;
   var room_id = req.params.room_id;
 });
+app.post('/home/:studyroom_id/:room_id',function(req, res){
+  // body - data, time, people
+});
 
 // host
+app.get('/host', function(req, res){
+
+});
 app.get('/host/insert', function(req,res){
   if(req.user){
-    res.render('upload');
+    res.status(200).end();
+    // res.render('upload');
   } else{
+    res.status(300).end();
     res.redirect('/auth/login');
   }
 });
@@ -238,11 +260,10 @@ app.post('/host/insert', studyroom_upload.single('image'), function(req,res){
       'adminId' : req.user.id
     };
     conn.query('INSERT INTO studyRooms SET ?', studyroom);
-    res.redirect('/');
-    // res.status(204);
+    res.status(200).end();
+    // res.redirect('/');
   })
 });
-
 // default testing root home
 app.get("/", function(req,res){
   var output = `
@@ -253,7 +274,7 @@ app.get("/", function(req,res){
   if(req.user){
     output += `<p><a href="/auth/logout">logout</a></p>`
   }
-  res.status(200).send(output);
+  res.send(output);
 });
 
 app.listen(3003, function(){
