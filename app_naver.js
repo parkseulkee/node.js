@@ -26,6 +26,7 @@ app.get('/naverlogin', function (req, res) {
      };
     request.get(options, function (error, response, body) {
       if (!error && response.statusCode == 200) {
+        console.log(body);
         res.writeHead(200, {'Content-Type': 'text/json;charset=utf-8'});
         var object = JSON.parse(body);
         accesstoken = object.access_token;

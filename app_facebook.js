@@ -1,20 +1,25 @@
 var express = require('express');
 var bodyParser = require('body-parser');
 var app = express();
+var redirectURI = encodeURI("http://localhost:3003/callback");
+var state = "RAMDOM_STATE";
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 app.get('/',function(req,res){
+  var url = 'https://www.facebook.com/v2.9/dialog/oauth?client_id=109125169639363&redirect_uri='+redirectURI;
+  res.writeHead(200, {'Content-Type': 'text/html;charset=utf-8'});
+  res.end("<a href='"+ url + "'>login</a>");
+});
+app.get('/callback',function(req,res){
+  var code = req.query.code;
+  var url = 'https://graph.facebook.com/v2.9/oauth/access_token?client_id=109125169639363'+'&redirect_uri='+redirectURI+'&client_secret=e7b147e18eaaa000c90f9c5580889a1f&code='+code;
   var request = require('request');
-  var message = "park seul kee : web test 'hi'";
-  var access_token = "EAAGSax5pVXYBAHyevjsPPQZCuoGBMSR5HePy0muOHUNTSmnvqAEGQYSRC1L3m5znHhEPzZBhR014LZCVV2xXwI5DdcJVdTozTpEReSgvqtkGCe8IZAw0T3M5ek7klgh82ZBmcgETfLn5JtIADInz4bZBnGoYjZAaSZCqGTzjYZBhn1FK6NwiBpuvBOJhsLpUr1GcZD";
-  var url = 'https://graph.facebook.com/me/feed?message=' + message + '&access_token=' + access_token;
   var options = {
     url: url
   };
-  request.post(options,function(error, response, body){
+  request.post(options,function (error, response, body){
     console.log(body);
-    res.end();
   });
 });
 app.listen(3003, function(){
