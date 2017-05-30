@@ -1,11 +1,8 @@
 var express = require('express');
 var cookieParser = require('cookie-parser');
 var session = require('express-session');
-// var session = require('cookie-session');
 var MySQLStore = require('express-mysql-session')(session);
 var bodyParser = require('body-parser');
-var jsonParser = bodyParser.json();
-// OAuth API - login variable
 var passport = require('passport');
 var FacebookStrategy = require('passport-facebook').Strategy;
 var GoogleStrategy = require('passport-google-oauth').OAuth2Strategy;
@@ -52,6 +49,7 @@ var app = express();
 
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 app.use(express.static('.'));
 app.use(session({
   key: 'sid',
@@ -82,8 +80,6 @@ var storeUser = function(req,res,authId,displayName){
       req.session.authId = authId;
       return req.session.save(function(){
         res.status(200).end();
-        // console.log(res);
-        // res.status(200).json(results);
       });
     }
     var newuser = {
@@ -98,14 +94,12 @@ var storeUser = function(req,res,authId,displayName){
       }
       req.session.authId = authId;
       return req.session.save(function(){
-        //res.status(200).json(newuser);
         res.status(200).end();
       })
     });
   });
 };
-app.get('/auth/facebook', jsonParser,function(req, res){
-  console.log(req.body);
+app.get('/auth/facebook',function(req, res){
   var access_token = req.body.access_token;
   var api_url = 'https://graph.facebook.com/v2.9/me?fields=id,name&access_token='+access_token;
   var request = require('request');
@@ -119,10 +113,7 @@ app.get('/auth/facebook', jsonParser,function(req, res){
     storeUser(req,res,authId,displayName);
   });
 });
-app.post('/auth/google', jsonParser, function(req, res){
-});
-app.post('/auth/naver', jsonParser, function(req, res){
-  console.log(req.body);
+app.post('/auth/naver', function(req, res){
   var access_token = req.body.access_token;
   var api_url = 'https://openapi.naver.com/v1/nid/me';
   var request = require('request');
@@ -153,7 +144,7 @@ app.get('/auth/logout', function(req, res){
 // my page
 app.get('/my/info', function(req, res){
   if(!req.session.authId){
-    return res.status(400).end();
+    return res.status(404).end();
   }
   var authId = req.session.authId;
   // var authId = 'naver:13109991';
@@ -165,7 +156,7 @@ app.get('/my/info', function(req, res){
       res.status(500).end();
     }
     var user = results[0];
-    var sql = 'SELECT reservations.*, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomsName\
+    var sql = 'SELECT DISTINCT reservations.*, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomsName\
     FROM studyRooms, rooms, reservations, users \
     WHERE reservations.userId=? and studyRooms.id=rooms.studyroomId and rooms.id=reservations.roomId and reservations.date >= CURDATE()';
     conn.query(sql,[user.id],function(err,results){
@@ -181,7 +172,7 @@ app.get('/my/info', function(req, res){
         var item = {
           id: results[i].id,
           studyroom : results[i].studyroomName,
-          room: results[i].roomName,
+          room: results[i].roomsName,
           address: results[i].address,
           date: year+'-'+month+'-'+day,
           time: results[i].start_time + '~' + results[i].end_time,
@@ -193,6 +184,7 @@ app.get('/my/info', function(req, res){
         user: user,
         reservations: reservations
       }
+      console.log(info);
       res.status(200).json(info);
     });
   });
@@ -215,7 +207,6 @@ app.get('/key/info', function(req,res){
     return res.status(404).send();
   }
   var authId = req.session.authId;
-  // var authId = 'naver:13109991';
   var sql = 'SELECT * FROM users WHERE authId=?';
   conn.query(sql,[authId],function(err,results){
     if(err){
@@ -223,17 +214,17 @@ app.get('/key/info', function(req,res){
       return res.status(500).end();
     }
     var user = results[0];
-    var sql = 'SELECT reservations.*, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomsName\
+    var sql = 'SELECT DISTINCT reservations.*, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomsName\
     FROM studyRooms, rooms, reservations, users \
     WHERE reservations.userId=? and studyRooms.id=rooms.studyroomId and rooms.id=reservations.roomId \
-    and reservations.date >= CURDATE() and HOUR(NOW()) >= reservations.start_time and HOUR(NOW()) <=  reservations.end_time';
+    and reservations.date = CURDATE() and HOUR(NOW()) >= reservations.start_time and HOUR(NOW()) <=  reservations.end_time';
     conn.query(sql,[user.id],function(err,results){
       if(err){
         console.log(err);
         return res.status(500).end();
       }
       if(!results.length){
-        return res.status(200).json({});
+        return res.status(404).end();
       }
       var date = results[0].date;
       var year  = date.getFullYear();
@@ -254,18 +245,131 @@ app.get('/key/info', function(req,res){
       var info = {
         key: item
       }
+      console.log(info);
       res.status(200).json(info);
     });
   });
 });
-app.get('/key/open', function(req,res){
-
+app.get('/key/open/', function(req,res){
+  if(!req.session.authId){
+    return res.status(404).end();
+  }
+  var authId = req.session.authId;
+  var sql = 'SELECT * FROM users where authId=?';
+  conn.query(sql,[authId],function(err,results){
+    if(err){
+      console.log(err);
+      return res.status(500).end();
+    }
+    var userId = results[0].id;
+    var sql = 'SELECT rooms.ip FROM reservations, rooms\
+    WHERE reservations.roomId = rooms.id and reservations.userId=? and reservations.date = CURDATE() \
+    and HOUR(NOW()) >= reservations.start_time and HOUR(NOW()) <=  reservations.end_time';
+    conn.query(sql,[userId],function(err,results){
+      if(err){
+        console.log(err);
+        return res.status(500).end();
+      }
+      if(!results.length){
+        return res.status(404).end();
+      }
+      var ip = results[0].ip;
+      var api_url = 'http://' + ip +'?pin=1';
+      var request = require('request');
+      var options = {
+        url: api_url
+      };
+      request.get(options, function (err, response, body){
+        if(err){
+          console.log(err);
+          return res.status(500).end();
+        }
+        res.status(200).end();
+      });
+    });
+  });
 });
 app.get('/key/lock', function(req,res){
-
+  if(!req.session.authId){
+    return res.status(404).end();
+  }
+  var authId = req.session.authId;
+  var sql = 'SELECT * FROM users where authId=?';
+  conn.query(sql,[authId],function(err,results){
+    if(err){
+      console.log(err);
+      return res.status(500).end();
+    }
+    var userId = results[0].id;
+    var sql = 'SELECT rooms.ip FROM reservations, rooms\
+    WHERE reservations.roomId = rooms.id and reservations.userId=? and reservations.date = CURDATE() \
+    and HOUR(NOW()) >= reservations.start_time and HOUR(NOW()) <=  reservations.end_time';
+    conn.query(sql,[userId],function(err,results){
+      if(err){
+        console.log(err);
+        return res.status(500).end();
+      }
+      if(!results.length){
+        return res.status(404).end();
+      }
+      var ip = results[0].ip;
+      var api_url = 'http://' + ip +'?pin=0';
+      var request = require('request');
+      var options = {
+        url: api_url
+      };
+      request.get(options, function (err, response, body){
+        if(err){
+          console.log(err);
+          return res.status(500).end();
+        }
+        res.status(200).end();
+      });
+    });
+  });
 });
 app.get('/key/return', function(req,res){
-
+  if(!req.session.authId){
+    return res.status(404).end();
+  }
+  var authId = req.session.authId;
+  var sql = 'SELECT * FROM users where authId=?';
+  conn.query(sql,[authId],function(err,results){
+    if(err){
+      console.log(err);
+      return res.status(500).end();
+    }
+    var userId = results[0].id;
+    var sql = 'SELECT reservations.id, rooms.ip FROM reservations, rooms\
+    WHERE reservations.roomId = rooms.id and reservations.userId=? and reservations.date = CURDATE() \
+    and HOUR(NOW()) >= reservations.start_time and HOUR(NOW()) <=  reservations.end_time';
+    conn.query(sql,[userId],function(err,results){
+      if(err){
+        console.log(err);
+        return res.status(500).end();
+      }
+      if(!results.length){
+        return res.status(404).end();
+      }
+      var ip = results[0].ip;
+      var id = results[0].id;
+      var api_url = 'http://' + ip +'?pin=0';
+      var request = require('request');
+      var options = {
+        url: api_url
+      };
+      request.get(options, function (err, response, body){
+        if(err){
+          console.log(err);
+          return res.status(500).end();
+        }
+        var sql = 'DELETE FROM reservations WHERE id=?';
+        conn.query(sql,[id],function(err,results){
+          res.status(200).end();
+        });
+      });
+    });
+  });
 });
 // home
 app.get('/home/list', function(req, res){
@@ -279,6 +383,7 @@ app.get('/home/list', function(req, res){
     var info = {
       list: results
     }
+    console.log(info);
     res.status(200).json(info);
   });
 });
@@ -305,6 +410,7 @@ app.get('/home/info/:studyroomId',function(req, res){
         rooms: rooms
         // host: host~
       }
+      console.log(info);
       res.status(200).json(info);
     });
   });
@@ -320,10 +426,11 @@ app.get('/home/reservation/:roomId',function(req, res){
       console.log(err);
       return res.status(500).end();
     }
+    console.log(results);
     res.status(200).json(results);
   });
 });
-app.post('/home/reservation/:roomId',jsonParser,function(req, res){
+app.post('/home/reservation/:roomId',function(req, res){
   // body - date, start_time, end_time, number
   console.log(req.body);
   var roomId = req.params.roomId;
@@ -376,7 +483,7 @@ app.get('/host/info',function(req,res){
       for(var i in results){
         studyrooms.push(results[i]);
       }
-      var sql = 'SELECT reservations.*, users.displayName, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomsName\
+      var sql = 'SELECT DISTINCT reservations.*, users.displayName, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomsName\
       FROM studyRooms, rooms, reservations, users \
       WHERE users.id=? and studyRooms.id=rooms.studyroomId and rooms.id=reservations.roomId and reservations.date >= CURDATE()';
       // detail mysql - and reservations.date >= CURDATE()
@@ -414,6 +521,7 @@ app.get('/host/info',function(req,res){
           studyrooms: studyrooms,
           reservations : reservations
         }
+        console.log(info);
         res.status(200).json(info);
       });
     })
@@ -423,24 +531,27 @@ app.get('/host/add', function(req,res){
   res.render('upload');
 });
 app.post('/host/add', studyroom_upload.single('image'), function(req,res){
+  //console.log(req);
   var sql = 'select id from studyRooms order by id desc limit 1';
   conn.query(sql,function(err, results){
     var id = 1;
     if(results.length) var id = results[0].id+1;
     var image = '/studyrooms_image/'+ id + '-' + req.file.originalname;
     var authId = req.session.authId;
-    var sql = 'SELECT id FROM users WHERE authId=?';
+    var sql = 'SELECT * FROM users WHERE authId=?';
     conn.query(sql,[authId],function(err,results){
       if(err){
         console.log(err);
         return res.status(500).end();
       }
+      if(!results.length) return res.status(404).end();
       var studyroom = {
-        'name' : req.body.name,
+        'name' : decodeURIComponent(req.body.name),
         'img' : image,
-        'address' : req.body.address,
+        'address' : decodeURIComponent(req.body.address),
         'adminId' : results[0].id
       };
+      console.log(studyroom);
       conn.query('INSERT INTO studyRooms SET ?', studyroom, function(err,results){
         if(err){
           console.log(err);
@@ -467,12 +578,13 @@ app.post('/host/add/:studyroomId',room_upload.single('image'), function(req,res)
     if(results.length) var id = results[0].id+1;
     var image = '/rooms_image/'+ id + '-' + req.file.originalname;
     var room = {
-      'name' : req.body.name,
+      'name' : decodeURIComponent(req.body.name),
       'img' : image,
-      'min' : parseInt(req.body.min),
-      'max' : parseInt(req.body.max),
+      'min' : parseInt(decodeURIComponent(req.body.min)),
+      'max' : parseInt(decodeURIComponent(req.body.max)),
       'studyroomId' : req.params.studyroomId,
-      'ip' : req.body.ip
+      'ip' : decodeURIComponent(req.body.ip),
+      'description' : decodeURIComponent(req.body.description)
     };
     conn.query('INSERT INTO rooms SET ?', room, function(err,results){
       if(err){
