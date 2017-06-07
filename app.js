@@ -3,12 +3,9 @@ var cookieParser = require('cookie-parser');
 var session = require('express-session');
 var MySQLStore = require('express-mysql-session')(session);
 var bodyParser = require('body-parser');
-var passport = require('passport');
-var FacebookStrategy = require('passport-facebook').Strategy;
-var GoogleStrategy = require('passport-google-oauth').OAuth2Strategy;
-var NaverStrategy = require('passport-naver').Strategy;
-// Image variable
 var multer = require('multer');
+
+// image store variable
 var studyroomStorage = multer.diskStorage({
   destination: function(req,file,cb){
     cb(null,'studyrooms_image/')
@@ -37,6 +34,8 @@ var roomStorage = multer.diskStorage({
 });
 var studyroom_upload = multer({storage:studyroomStorage});
 var room_upload = multer({storage:roomStorage});
+
+// database variable
 var mysql = require('mysql');
 var conn = mysql.createConnection({
   host     : 'localhost',
@@ -44,6 +43,8 @@ var conn = mysql.createConnection({
   password : 'qlrqodtmfrl2',
   database : 'team25'
 });
+
+
 conn.connect();
 var app = express();
 
@@ -64,7 +65,7 @@ app.use(session({
     database:'team25'
   })
 }));
-app.use(passport.initialize());
+
 // test rendering file setting
 app.set('views','./views_file');
 app.set('view engine','jade');
@@ -94,11 +95,13 @@ var storeUser = function(req,res,authId,displayName){
       }
       req.session.authId = authId;
       return req.session.save(function(){
-        res.status(200).end();
-      })
+        // email.phone number get redirection
+        res.status(300).end();
+      });
     });
   });
 };
+
 app.get('/auth/facebook',function(req, res){
   var access_token = req.body.access_token;
   var api_url = 'https://graph.facebook.com/v2.9/me?fields=id,name&access_token='+access_token;
@@ -106,7 +109,12 @@ app.get('/auth/facebook',function(req, res){
   var options = {
     url: api_url
   };
-  request.get(options,function(err,response,body){
+  request.get(options,function(error,response,body){
+    if(error){
+      console.log(err);
+      return res.status(404).end();
+    }
+    console.log(body);
     var object = JSON.parse(body);
     var authId = "facebook:"+object.id;
     var displayName = object.name;
@@ -141,22 +149,20 @@ app.get('/auth/logout', function(req, res){
   });
 });
 
-// my page
+
 app.get('/my/info', function(req, res){
   if(!req.session.authId){
     return res.status(404).end();
   }
   var authId = req.session.authId;
-  // var authId = 'naver:13109991';
-  console.log(req.session);
   var sql = 'SELECT * FROM users WHERE authId=?';
   conn.query(sql,[authId], function(err, results){
     if(err){
       console.log(err);
-      res.status(500).end();
+      return res.status(500).end();
     }
     var user = results[0];
-    var sql = 'SELECT DISTINCT reservations.*, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomsName\
+    var sql = 'SELECT DISTINCT reservations.*, studyRooms.img, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomName\
     FROM studyRooms, rooms, reservations, users \
     WHERE reservations.userId=? and studyRooms.id=rooms.studyroomId and rooms.id=reservations.roomId and reservations.date >= CURDATE()';
     conn.query(sql,[user.id],function(err,results){
@@ -166,17 +172,18 @@ app.get('/my/info', function(req, res){
         var year  = date.getFullYear();
         var month = date.getMonth() + 1;
         var day   = date.getDate();
-
         if (("" + month).length == 1) { month = "0" + month; }
         if (("" + day).length   == 1) { day   = "0" + day;   }
+
         var item = {
           id: results[i].id,
+          img: results[i].img,
           studyroom : results[i].studyroomName,
-          room: results[i].roomsName,
+          room: results[i].roomName,
           address: results[i].address,
-          date: year+'-'+month+'-'+day,
+          date: year + '-' + month + '-' + day,
           time: results[i].start_time + '~' + results[i].end_time,
-          number: results[i].number
+          number: results[i].number + '명'
         }
         reservations.push(item);
       }
@@ -190,18 +197,7 @@ app.get('/my/info', function(req, res){
   });
 });
 
-app.get('/key/test', function(req,res){
-  // parameter SET
-  var api_url = 'http://192.168.0.57:80?pin=0';
-  var request = require('request');
-  var options = {
-    url: api_url
-  };
-  request.get(options, function (err, response, body){
 
-  });
-  res.status(200).end();
-});
 app.get('/key/info', function(req,res){
   if(!req.session.authId){
     return res.status(404).send();
@@ -214,7 +210,7 @@ app.get('/key/info', function(req,res){
       return res.status(500).end();
     }
     var user = results[0];
-    var sql = 'SELECT DISTINCT reservations.*, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomsName\
+    var sql = 'SELECT DISTINCT reservations.*, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomName\
     FROM studyRooms, rooms, reservations, users \
     WHERE reservations.userId=? and studyRooms.id=rooms.studyroomId and rooms.id=reservations.roomId \
     and reservations.date = CURDATE() and HOUR(NOW()) >= reservations.start_time and HOUR(NOW()) <=  reservations.end_time';
@@ -230,9 +226,9 @@ app.get('/key/info', function(req,res){
       var year  = date.getFullYear();
       var month = date.getMonth() + 1;
       var day   = date.getDate();
-
       if (("" + month).length == 1) { month = "0" + month; }
       if (("" + day).length   == 1) { day   = "0" + day;   }
+
       var item = {
         id: results[0].id,
         studyroom : results[0].studyroomName,
@@ -251,6 +247,7 @@ app.get('/key/info', function(req,res){
   });
 });
 app.get('/key/open/', function(req,res){
+  console.log(req);
   if(!req.session.authId){
     return res.status(404).end();
   }
@@ -274,16 +271,12 @@ app.get('/key/open/', function(req,res){
         return res.status(404).end();
       }
       var ip = results[0].ip;
-      var api_url = 'http://' + ip +'?pin=1';
+      var api_url = 'http://' + ip +':80?pin=1';
       var request = require('request');
       var options = {
         url: api_url
       };
       request.get(options, function (err, response, body){
-        if(err){
-          console.log(err);
-          return res.status(500).end();
-        }
         res.status(200).end();
       });
     });
@@ -313,16 +306,12 @@ app.get('/key/lock', function(req,res){
         return res.status(404).end();
       }
       var ip = results[0].ip;
-      var api_url = 'http://' + ip +'?pin=0';
+      var api_url = 'http://' + ip +':80?pin=0';
       var request = require('request');
       var options = {
         url: api_url
       };
       request.get(options, function (err, response, body){
-        if(err){
-          console.log(err);
-          return res.status(500).end();
-        }
         res.status(200).end();
       });
     });
@@ -353,16 +342,12 @@ app.get('/key/return', function(req,res){
       }
       var ip = results[0].ip;
       var id = results[0].id;
-      var api_url = 'http://' + ip +'?pin=0';
+      var api_url = 'http://' + ip +'?:80pin=0';
       var request = require('request');
       var options = {
         url: api_url
       };
       request.get(options, function (err, response, body){
-        if(err){
-          console.log(err);
-          return res.status(500).end();
-        }
         var sql = 'DELETE FROM reservations WHERE id=?';
         conn.query(sql,[id],function(err,results){
           res.status(200).end();
@@ -371,9 +356,33 @@ app.get('/key/return', function(req,res){
     });
   });
 });
-// home
+app.get('/key/camera',function(req,res){
+  if(!req.session.authId){
+    return res.status(404).end();
+  }
+  var authId = req.session.authId;
+  var sql = 'SELECT * FROM users where authId=?';
+  conn.query(sql,[authId],function(err,results){
+    if(err){
+      console.log(err);
+      return res.status(500).end();
+    }
+    var userId = results[0].id;
+    var sql = '';
+    conn.query(sql,[userId],function(err,results){
+      if(err){
+        console.log(err);
+        return res.status(500).end();
+      }
+      if(!results.length){
+        return res.status(404).end();
+      }
+      var adminId = results[0].email;
+    });
+  });
+});
+
 app.get('/home/list', function(req, res){
-  // console.log(req);
   var sql = 'SELECT * FROM studyRooms';
   conn.query(sql, function(err, results){
     if(err){
@@ -415,23 +424,22 @@ app.get('/home/info/:studyroomId',function(req, res){
     });
   });
 });
-app.get('/home/reservation/:roomId',function(req, res){
-  if(!req.session.authId){
-    return res.status(404).end();
-  }
+app.get('/home/reservation/:roomId',function(req,res){
   var roomId = req.params.roomId;
-  var sql = 'SELECT * FROM reservations WHERE roomId=?';
+  var sql = 'SELECT date,start_time,end_time FROM reservations WHERE roomId=?';
   conn.query(sql,[roomId],function(err,results){
     if(err){
       console.log(err);
       return res.status(500).end();
     }
-    console.log(results);
     res.status(200).json(results);
   });
 });
 app.post('/home/reservation/:roomId',function(req, res){
   // body - date, start_time, end_time, number
+  if(!req.session.authId){
+    return res.status(404).end();
+  }
   console.log(req.body);
   var roomId = req.params.roomId;
   var authId = req.session.authId;
@@ -449,11 +457,14 @@ app.post('/home/reservation/:roomId',function(req, res){
       number: req.body.number,
       roomId: roomId
     }
-    if(err){
-      console.log(err);
-      return res.status(500).end();
-    }
-    res.status(200).end();
+    var sql = 'INSERT INTO reservations SET ?';
+    conn.query(sql,reservation,function(err,results){
+      if(err){
+        console.log(err);
+        return res.status(500).end();
+      }
+      res.status(200).end();
+    });
   });
 });
 
@@ -462,7 +473,6 @@ app.get('/host/info',function(req,res){
     return res.status(404).end();
   }
   var authId = req.session.authId;
-  // var authId = 'naver:24364688';
   var sql = 'SELECT * FROM users WHERE authId=?';
   conn.query(sql,[authId],function(err,results){
     if(err){
@@ -476,24 +486,17 @@ app.get('/host/info',function(req,res){
         console.log(err);
         return res.status(500).end();
       }
-      if(!results.length){
-        return res.status(200).json({});
-      }
       var studyrooms = new Array();
       for(var i in results){
         studyrooms.push(results[i]);
       }
-      var sql = 'SELECT DISTINCT reservations.*, users.displayName, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomsName\
+      var sql = 'SELECT DISTINCT reservations.*, users.displayName, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomName\
       FROM studyRooms, rooms, reservations, users \
       WHERE users.id=? and studyRooms.id=rooms.studyroomId and rooms.id=reservations.roomId and reservations.date >= CURDATE()';
-      // detail mysql - and reservations.date >= CURDATE()
       conn.query(sql,[adminId],function(err,results){
         if(err){
           console.log(err);
           return res.status(500).end();
-        }
-        if(!results.length){
-          return res.status(200).json({});
         }
         var reservations = new Array();
         for(var i in results){
@@ -511,9 +514,9 @@ app.get('/host/info',function(req,res){
             studyroom : results[i].studyroomName,
             room: results[i].roomName,
             address: results[i].address,
-            date: year+'-'+month+'-'+day,
+            date: year + '-' + month + '-' + day,
             time: results[i].start_time + '~' + results[i].end_time,
-            number: results[i].number
+            number: results[i].number + '명'
           }
           reservations.push(item);
         }
@@ -527,11 +530,11 @@ app.get('/host/info',function(req,res){
     })
   });
 });
-app.get('/host/add', function(req,res){
-  res.render('upload');
-});
 app.post('/host/add', studyroom_upload.single('image'), function(req,res){
-  //console.log(req);
+  // body - image, name, address
+  if(!req.session.authId){
+    return res.status(404).end();
+  }
   var sql = 'select id from studyRooms order by id desc limit 1';
   conn.query(sql,function(err, results){
     var id = 1;
@@ -544,7 +547,6 @@ app.post('/host/add', studyroom_upload.single('image'), function(req,res){
         console.log(err);
         return res.status(500).end();
       }
-      if(!results.length) return res.status(404).end();
       var studyroom = {
         'name' : decodeURIComponent(req.body.name),
         'img' : image,
@@ -557,17 +559,16 @@ app.post('/host/add', studyroom_upload.single('image'), function(req,res){
           console.log(err);
           return res.status(500).end();
         }
-        else{
-          res.status(200).end();
-        }
+        res.status(200).end();
       });
     });
   })
 });
-app.get('/host/add/:studyroomId',function(req,res){
-  res.render('roomUpload');
-});
 app.post('/host/add/:studyroomId',room_upload.single('image'), function(req,res){
+  // body - name, image, max, ip, description
+  if(!req.session.authId){
+    return res.status(404).end();
+  }
   var sql = 'select id from rooms order by id desc limit 1';
   conn.query(sql,function(err, results){
     if(err){
@@ -580,7 +581,6 @@ app.post('/host/add/:studyroomId',room_upload.single('image'), function(req,res)
     var room = {
       'name' : decodeURIComponent(req.body.name),
       'img' : image,
-      'min' : parseInt(decodeURIComponent(req.body.min)),
       'max' : parseInt(decodeURIComponent(req.body.max)),
       'studyroomId' : req.params.studyroomId,
       'ip' : decodeURIComponent(req.body.ip),
@@ -591,10 +591,20 @@ app.post('/host/add/:studyroomId',room_upload.single('image'), function(req,res)
         console.log(err);
         return res.status(500).end();
       }
-      else{
-        res.status(200).end();
-      }
+      res.status(200).end();
     });
+  });
+});
+app.get('/host/info/:studyroomId',function(req,res){
+  var studyroomId = req.params.studyroomId;
+  var sql = 'SELECT * FROM rooms WHERE studyroomId=?';
+  conn.query(sql,[studyroomId],function(err,results){
+    if(err){
+      console.log(err);
+      return res.status(500).end();
+    }
+    console.log(results);
+    res.status(200).json(results);
   });
 });
 

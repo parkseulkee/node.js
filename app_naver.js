@@ -8,7 +8,7 @@ var redirectURI = encodeURI("http://localhost:3003/callback");
 var api_url = "";
 var accesstoken="";
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
+// app.use(bodyParser.json());
 app.get('/naverlogin', function (req, res) {
   api_url = 'https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=' + client_id + '&redirect_uri=' + redirectURI + '&state=' + state;
    res.writeHead(200, {'Content-Type': 'text/html;charset=utf-8'});
@@ -27,9 +27,6 @@ app.get('/naverlogin', function (req, res) {
     request.get(options, function (error, response, body) {
       if (!error && response.statusCode == 200) {
         console.log(body);
-        res.writeHead(200, {'Content-Type': 'text/json;charset=utf-8'});
-        var object = JSON.parse(body);
-        accesstoken = object.access_token;
         res.end(body);
       } else {
         res.status(response.statusCode).end();
