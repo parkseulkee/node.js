@@ -32,9 +32,23 @@ var roomStorage = multer.diskStorage({
     })
   }
 });
+var postStorage = multer.diskStorage({
+  destination: function(req,file,cb){
+    cb(null,'post_image/')
+  },
+  filename: function(req,file,cb){
+    var sql = 'select id from posts order by id desc limit 1';
+    conn.query(sql,function(err, results){
+      var id = 1;
+      if(results.length) id = results[0].id+1;
+      cb(null,id + '-' + file.originalname);
+    })
+  }
+});
+
 var studyroom_upload = multer({storage:studyroomStorage});
 var room_upload = multer({storage:roomStorage});
-
+var post_upload = multer({storage:postStorage});
 // database variable
 var mysql = require('mysql');
 var conn = mysql.createConnection({
@@ -70,6 +84,9 @@ app.use(session({
 app.set('views','./views_file');
 app.set('view engine','jade');
 
+function urldecode (str) {
+   return decodeURIComponent((str + '').replace(/\+/g, '%20'));  // 공백 문자인 + 를 처리하기 위해 +('%20') 을 공백으로 치환
+ }
 var storeUser = function(req,res,authId,displayName){
   var sql = 'SELECT * FROM users WHERE authId=?';
   conn.query(sql,[authId],function(err,results){
@@ -102,26 +119,14 @@ var storeUser = function(req,res,authId,displayName){
   });
 };
 
-app.get('/auth/facebook',function(req, res){
-  var access_token = req.body.access_token;
-  var api_url = 'https://graph.facebook.com/v2.9/me?fields=id,name&access_token='+access_token;
-  var request = require('request');
-  var options = {
-    url: api_url
-  };
-  request.get(options,function(error,response,body){
-    if(error){
-      console.log(err);
-      return res.status(404).end();
-    }
-    console.log(body);
-    var object = JSON.parse(body);
-    var authId = "facebook:"+object.id;
-    var displayName = object.name;
-    storeUser(req,res,authId,displayName);
-  });
+app.post('/auth/facebook',function(req, res){
+  console.log(req.body);
+  var authId = "facebook:"+req.body.id;
+  var displayName = req.body.name
+  storeUser(req,res,authId,displayName);
 });
 app.post('/auth/naver', function(req, res){
+  console.log(req.body);
   var access_token = req.body.access_token;
   var api_url = 'https://openapi.naver.com/v1/nid/me';
   var request = require('request');
@@ -197,12 +202,23 @@ app.get('/my/info', function(req, res){
   });
 });
 
-
+app.get('/key/test',function(req,res){
+  console.log("key test");
+  var url = 'http://192.168.0.57:80?pin=1';
+  var request = require('request');
+  var options = {
+    url: url
+  };
+  request.get(options,function(err,responce,body){
+    res.status(200).end();
+  });
+});
 app.get('/key/info', function(req,res){
   if(!req.session.authId){
     return res.status(404).send();
   }
   var authId = req.session.authId;
+  console.log("key info : "+authId);
   var sql = 'SELECT * FROM users WHERE authId=?';
   conn.query(sql,[authId],function(err,results){
     if(err){
@@ -220,7 +236,7 @@ app.get('/key/info', function(req,res){
         return res.status(500).end();
       }
       if(!results.length){
-        return res.status(404).end();
+        return res.status(400).end();
       }
       var date = results[0].date;
       var year  = date.getFullYear();
@@ -342,13 +358,14 @@ app.get('/key/return', function(req,res){
       }
       var ip = results[0].ip;
       var id = results[0].id;
-      var api_url = 'http://' + ip +'?:80pin=0';
+      var api_url = 'http://' + ip +':80?pin=0';
       var request = require('request');
       var options = {
         url: api_url
       };
       request.get(options, function (err, response, body){
         var sql = 'DELETE FROM reservations WHERE id=?';
+        console.log("delete reservations : "+id);
         conn.query(sql,[id],function(err,results){
           res.status(200).end();
         });
@@ -356,28 +373,43 @@ app.get('/key/return', function(req,res){
     });
   });
 });
-app.get('/key/camera',function(req,res){
+app.post('/key/camera',post_upload.single('image'), function(req,res){
   if(!req.session.authId){
-    return res.status(404).end();
+    return res.status(404).send();
   }
+  console.log(req.file.originalname);
   var authId = req.session.authId;
-  var sql = 'SELECT * FROM users where authId=?';
-  conn.query(sql,[authId],function(err,results){
-    if(err){
-      console.log(err);
-      return res.status(500).end();
-    }
-    var userId = results[0].id;
-    var sql = '';
-    conn.query(sql,[userId],function(err,results){
+  var sql = 'select id from posts order by id desc limit 1';
+  conn.query(sql,function(err, results){
+    var id = 1;
+    if(results.length) var id = results[0].id+1;
+    var image = '/post_image/'+ id + '-' + req.file.originalname;
+    var sql = 'SELECT * FROM users WHERE authId=?';
+    conn.query(sql,[authId],function(err,results){
       if(err){
         console.log(err);
         return res.status(500).end();
       }
-      if(!results.length){
-        return res.status(404).end();
-      }
-      var adminId = results[0].email;
+      var user = results[0];
+      var sql = 'SELECT DISTINCT reservations.*\
+      FROM studyRooms, rooms, reservations, users \
+      WHERE reservations.userId=? and studyRooms.id=rooms.studyroomId and rooms.id=reservations.roomId \
+      and reservations.date = CURDATE() and HOUR(NOW()) >= reservations.start_time and HOUR(NOW()) <=  reservations.end_time';
+      conn.query(sql,[user.id],function(err,results){
+        var reservationId = results[0].id;
+        var item = {
+          img: image,
+          reservationId: reservationId
+        };
+        var sql = 'INSERT INTO posts SET ?';
+        conn.query(sql,item,function(err,results){
+          if(err){
+            console.log(err);
+            return res.status(200).end();
+          }
+          res.status(200).end();
+        });
+      });
     });
   });
 });
@@ -414,13 +446,29 @@ app.get('/home/info/:studyroomId',function(req, res){
         console.log(err);
         return res.status(500).end();
       }
-      var info = {
-        studyroom: results[0],
-        rooms: rooms
-        // host: host~
-      }
-      console.log(info);
-      res.status(200).json(info);
+      var client_id = 'H5SkK1jCLdUe4Q9S_MHJ';
+      var client_secret = '44ysQHEvj0';
+      var api_url = 'https://openapi.naver.com/v1/map/geocode?query=' + encodeURI(results[0].address);
+      var request = require('request');
+      var options = {
+          url: api_url,
+          headers: {'X-Naver-Client-Id':client_id, 'X-Naver-Client-Secret': client_secret}
+       };
+      request.get(options, function (error, response, body){
+        var object = JSON.parse(body);
+        var map = object.result.items[0].point;
+        var point = {
+          x: map.x,
+          y: map.y
+        }
+        var info = {
+          studyroom: results[0],
+          rooms: rooms,
+          point: point
+        }
+        console.log(info);
+        res.status(200).json(info);
+      });
     });
   });
 });
@@ -492,7 +540,7 @@ app.get('/host/info',function(req,res){
       }
       var sql = 'SELECT DISTINCT reservations.*, users.displayName, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomName\
       FROM studyRooms, rooms, reservations, users \
-      WHERE users.id=? and studyRooms.id=rooms.studyroomId and rooms.id=reservations.roomId and reservations.date >= CURDATE()';
+      WHERE studyRooms.id=rooms.studyroomId and studyRooms.adminId=? and rooms.id=reservations.roomId and reservations.date >= CURDATE()';
       conn.query(sql,[adminId],function(err,results){
         if(err){
           console.log(err);
@@ -530,11 +578,16 @@ app.get('/host/info',function(req,res){
     })
   });
 });
+app.get('/host/add',function(req,res){
+  res.render('upload');
+});
 app.post('/host/add', studyroom_upload.single('image'), function(req,res){
   // body - image, name, address
+  console.log(req.body);
   if(!req.session.authId){
     return res.status(404).end();
   }
+  console.log("host studyroom add : "+req.session.authId);
   var sql = 'select id from studyRooms order by id desc limit 1';
   conn.query(sql,function(err, results){
     var id = 1;
@@ -548,9 +601,9 @@ app.post('/host/add', studyroom_upload.single('image'), function(req,res){
         return res.status(500).end();
       }
       var studyroom = {
-        'name' : decodeURIComponent(req.body.name),
+        'name' : urldecode(req.body.name),
         'img' : image,
-        'address' : decodeURIComponent(req.body.address),
+        'address' : urldecode(req.body.address),
         'adminId' : results[0].id
       };
       console.log(studyroom);
@@ -569,6 +622,9 @@ app.post('/host/add/:studyroomId',room_upload.single('image'), function(req,res)
   if(!req.session.authId){
     return res.status(404).end();
   }
+  console.log(req.params.studyroomId);
+  console.log("host room add : "+req.session.authId);
+  console.log(req.body);
   var sql = 'select id from rooms order by id desc limit 1';
   conn.query(sql,function(err, results){
     if(err){
@@ -579,13 +635,14 @@ app.post('/host/add/:studyroomId',room_upload.single('image'), function(req,res)
     if(results.length) var id = results[0].id+1;
     var image = '/rooms_image/'+ id + '-' + req.file.originalname;
     var room = {
-      'name' : decodeURIComponent(req.body.name),
+      'name' : urldecode(req.body.name),
       'img' : image,
-      'max' : parseInt(decodeURIComponent(req.body.max)),
+      'max' : parseInt(urldecode(req.body.max)),
       'studyroomId' : req.params.studyroomId,
-      'ip' : decodeURIComponent(req.body.ip),
-      'description' : decodeURIComponent(req.body.description)
+      'ip' : urldecode(req.body.ip),
+      'description' : urldecode(req.body.description)
     };
+    console.log(room);
     conn.query('INSERT INTO rooms SET ?', room, function(err,results){
       if(err){
         console.log(err);
@@ -603,10 +660,44 @@ app.get('/host/info/:studyroomId',function(req,res){
       console.log(err);
       return res.status(500).end();
     }
-    console.log(results);
-    res.status(200).json(results);
+    var rooms = new Array();
+    for(var i in results){
+      var item = {
+        id: results[i].id,
+        name: results[i].name,
+        img: results[i].img,
+        ip: results[i].ip,
+        max: results[i].max,
+        description: results[i].description
+      }
+      rooms.push(item);
+    }
+    var info = {
+      rooms: rooms
+    }
+    res.status(200).json(info);
   });
 });
+app.get('/host/camera/:reservationId',function(req,res){
+  var reservationId = req.params.reservationId;
+  var camera = new Array();
+  var sql = 'SELECT * FROM posts WHERE reservationId=?';
+  console.log(reservationId);
+  conn.query(sql,[reservationId],function(err,results){
+    for(var i in results){
+      var img = {
+        img: results[i].img
+      }
+      camera.push(results[i]);
+    }
+    var info = {
+      camera: camera
+    }
+    console.log(info);
+    res.status(200).json(info);
+  });
+});
+
 
 app.listen(3003, function(){
   console.log('Connected http://127.0.0.1:3003/ server.');
