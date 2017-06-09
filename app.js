@@ -472,10 +472,11 @@ app.get('/home/info/:studyroomId',function(req, res){
     });
   });
 });
-app.get('/home/reservation/:roomId',function(req,res){
+app.get('/home/reservation/:roomId/:date',function(req,res){
   var roomId = req.params.roomId;
-  var sql = 'SELECT date,start_time,end_time FROM reservations WHERE roomId=?';
-  conn.query(sql,[roomId],function(err,results){
+  var date = req.params.date;
+  var sql = 'SELECT start_time,end_time FROM reservations WHERE roomId=? and date=?';
+  conn.query(sql,[roomId,date],function(err,results){
     if(err){
       console.log(err);
       return res.status(500).end();
@@ -538,9 +539,9 @@ app.get('/host/info',function(req,res){
       for(var i in results){
         studyrooms.push(results[i]);
       }
-      var sql = 'SELECT DISTINCT reservations.*, users.displayName, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomName\
+      var sql = 'SELECT reservations.*, users.*, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomName\
       FROM studyRooms, rooms, reservations, users \
-      WHERE studyRooms.id=rooms.studyroomId and studyRooms.adminId=? and rooms.id=reservations.roomId and reservations.date >= CURDATE()';
+      WHERE users.id=reservations.userId and studyRooms.adminId=? and studyRooms.id=rooms.studyroomId  and rooms.id=reservations.roomId and reservations.date >= CURDATE()';
       conn.query(sql,[adminId],function(err,results){
         if(err){
           console.log(err);
