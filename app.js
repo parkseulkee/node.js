@@ -399,7 +399,7 @@ app.post('/key/camera',post_upload.single('image'), function(req,res){
         var reservationId = results[0].id;
         var item = {
           img: image,
-          reservationId: reservationId
+          reservationsId: reservationId
         };
         var sql = 'INSERT INTO posts SET ?';
         conn.query(sql,item,function(err,results){
@@ -481,7 +481,18 @@ app.get('/home/reservation/:roomId/:date',function(req,res){
       console.log(err);
       return res.status(500).end();
     }
-    res.status(200).json(results);
+    var time = new Array();
+    for(var i in results){
+      var item = {
+        start_time: results[i].start_time,
+        end_time: results[i].end_time
+      }
+      tiem.push(item);
+    }
+    var info = {
+      time: time
+    }
+    res.status(200).json(info);
   });
 });
 app.post('/home/reservation/:roomId',function(req, res){
@@ -539,7 +550,7 @@ app.get('/host/info',function(req,res){
       for(var i in results){
         studyrooms.push(results[i]);
       }
-      var sql = 'SELECT reservations.*, users.*, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomName\
+      var sql = 'SELECT reservations.*, users.displayName, studyRooms.name as studyroomName, studyRooms.address, rooms.name as roomName\
       FROM studyRooms, rooms, reservations, users \
       WHERE users.id=reservations.userId and studyRooms.adminId=? and studyRooms.id=rooms.studyroomId  and rooms.id=reservations.roomId and reservations.date >= CURDATE()';
       conn.query(sql,[adminId],function(err,results){
@@ -682,7 +693,7 @@ app.get('/host/info/:studyroomId',function(req,res){
 app.get('/host/camera/:reservationId',function(req,res){
   var reservationId = req.params.reservationId;
   var camera = new Array();
-  var sql = 'SELECT * FROM posts WHERE reservationId=?';
+  var sql = 'SELECT * FROM posts WHERE reservationsId=?';
   console.log(reservationId);
   conn.query(sql,[reservationId],function(err,results){
     for(var i in results){
